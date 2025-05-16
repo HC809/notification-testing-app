@@ -3,95 +3,50 @@ import { StyleSheet, Text, View, Button } from 'react-native';
 import { useEffect, useState } from 'react';
 import NotificationService from './services/NotificationService';
 
-enum LoanNotificationType {
-  StatusChanged = 'StatusChanged',
-  Message = 'Message',
-  System = 'System'
-}
-
-interface LoanNotification {
-  id: string;
-  title: string;
-  message: string;
-  type: LoanNotificationType;
-  userToNotifyId?: string;
-  loanRequestId?: string;
-  createdAt: string;
-  metadata?: Record<string, any>;
-}
-
 export default function App() {
-  const [message, setMessage] = useState<string>('');
-  const [notification, setNotification] = useState<LoanNotification | null>(null);
+  const [pushToken, setPushToken] = useState<string | null>(null);
+  const [lastNotification, setLastNotification] = useState<any>(null);
 
   useEffect(() => {
     const notificationService = NotificationService.getInstance();
 
-    // Set up message handler
-    notificationService.onReceiveMessage((receivedMessage) => {
-      setMessage(receivedMessage);
-    });
-
-    // Set up notification handler
-    notificationService.onReceiveNotification((notification) => {
-      // Aquí deberías recibir el objeto LoanNotification completo
-      // Si no es así, necesitarás ajustar el NotificationService
-      setNotification({
-        id: notification.id,
-        title: notification.title,
-        message: notification.message,
-        type: notification.type as LoanNotificationType,
-        createdAt: notification.createdAt
-      });
-    });
-
-    // Start the connection
-    notificationService.startConnection().catch(console.error);
-
-    // Cleanup on unmount
-    return () => {
-      notificationService.stopConnection().catch(console.error);
+    // Registrar para notificaciones push
+    const registerPushNotifications = async () => {
+      const token = await notificationService.registerForPushNotifications();
+      setPushToken(token);
     };
-  }, []);
 
-  const handleSendTestMessage = async () => {
-    try {
-      const notificationService = NotificationService.getInstance();
-      await notificationService.sendTestMessage('Hello from React Native!!!');
-    } catch (error) {
-      console.error('Error sending test message:', error);
-    }
-  };
+    registerPushNotifications();
+
+    // Configurar los listeners de notificaciones
+    const cleanup = notificationService.setupNotificationListeners();
+
+    // Limpiar los listeners cuando el componente se desmonta
+    return cleanup;
+  }, []);
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>SignalR Notification Test</Text>
+      <Text style={styles.title}>Push Notifications Test</Text>
       
-      {message && (
-        <View style={styles.messageContainer}>
-          <Text style={styles.messageText}>Message: {message}</Text>
+      {pushToken ? (
+        <View style={styles.tokenContainer}>
+          <Text style={styles.tokenLabel}>Push Token:</Text>
+          <Text style={styles.tokenText}>{pushToken}</Text>
         </View>
+      ) : (
+        <Text style={styles.errorText}>No push token available</Text>
       )}
 
-      {notification && (
+      {lastNotification && (
         <View style={styles.notificationContainer}>
-          <Text style={styles.notificationTitle}>{notification.title}</Text>
-          <Text style={styles.notificationText}>{notification.message}</Text>
-          <Text style={styles.notificationDetail}>
-            Type: {notification.type}
-          </Text>
-          {notification.loanRequestId && (
-            <Text style={styles.notificationDetail}>
-              Loan Request ID: {notification.loanRequestId}
-            </Text>
-          )}
-          <Text style={styles.notificationDetail}>
-            Created: {new Date(notification.createdAt).toLocaleString()}
+          <Text style={styles.notificationTitle}>Last Notification:</Text>
+          <Text style={styles.notificationText}>
+            {JSON.stringify(lastNotification, null, 2)}
           </Text>
         </View>
       )}
 
-      <Button title="Send Test Message" onPress={handleSendTestMessage} />
       <StatusBar style="auto" />
     </View>
   );
@@ -110,15 +65,25 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 20,
   },
-  messageContainer: {
+  tokenContainer: {
     backgroundColor: '#e3f2fd',
     padding: 15,
     borderRadius: 8,
     marginBottom: 20,
     width: '100%',
   },
-  messageText: {
+  tokenLabel: {
     fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  tokenText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  errorText: {
+    color: 'red',
+    marginBottom: 20,
   },
   notificationContainer: {
     backgroundColor: '#f3e5f5',
@@ -133,12 +98,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   notificationText: {
-    fontSize: 16,
-    marginBottom: 8,
-  },
-  notificationDetail: {
     fontSize: 14,
     color: '#666',
-    marginBottom: 4,
   },
 });
